@@ -3,14 +3,12 @@ import { User, Tenant } from './api';
 export interface LoginRequest {
   email: string;
   password: string;
-  tenantId: string;
 }
 
 export interface RegisterRequest {
   email: string;
   name: string;
   password: string;
-  tenantId: string;
   role?: 'ADMIN' | 'USER';
 }
 

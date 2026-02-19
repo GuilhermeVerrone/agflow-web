@@ -6,7 +6,15 @@ export interface CreateAppointmentRequest {
   description?: string;
   startTime: string;
   endTime: string;
-  status?: string;
+  professionalId: string;
+  serviceId: string;
+  clientId: string;
+  resourceId?: string;
+  branchId?: string;
+  internalNotes?: string;
+  source?: string;
+  isRecurring?: boolean;
+  recurringRule?: string;
 }
 
 export interface UpdateAppointmentRequest {
@@ -14,64 +22,104 @@ export interface UpdateAppointmentRequest {
   description?: string;
   startTime?: string;
   endTime?: string;
-  status?: string;
+  professionalId?: string;
+  serviceId?: string;
+  clientId?: string;
+  resourceId?: string;
+  branchId?: string;
+  internalNotes?: string;
+  source?: string;
+  status?: 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW' | 'RESCHEDULED';
+  cancellationReason?: string;
 }
 
 export interface QueryAppointmentsParams {
-  startDate?: string;
-  endDate?: string;
+  dateFrom?: string;
+  dateTo?: string;
   status?: string;
+  professionalId?: string;
+  serviceId?: string;
+  clientId?: string;
+  branchId?: string;
+  source?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CheckAvailabilityRequest {
+  professionalId: string;
+  serviceId: string;
+  date: string;
+  resourceId?: string;
 }
 
 class AppointmentService {
-  async listAppointments(params?: QueryAppointmentsParams): Promise<Appointment[]> {
-    const response = await apiClient.get<Appointment[]>('/scheduling', { params });
+  async listAppointments(params?: QueryAppointmentsParams) {
+    const response = await apiClient.get('/appointments', { params });
     return response.data;
   }
 
   async getAppointment(id: string): Promise<Appointment> {
-    const response = await apiClient.get<Appointment>(`/scheduling/${id}`);
+    const response = await apiClient.get<Appointment>(`/appointments/${id}`);
     return response.data;
   }
 
   async createAppointment(data: CreateAppointmentRequest): Promise<Appointment> {
-    const response = await apiClient.post<Appointment>('/scheduling', data);
+    const response = await apiClient.post<Appointment>('/appointments', data);
     return response.data;
   }
 
   async updateAppointment(id: string, data: UpdateAppointmentRequest): Promise<Appointment> {
-    const response = await apiClient.patch<Appointment>(`/scheduling/${id}`, data);
+    const response = await apiClient.patch<Appointment>(`/appointments/${id}`, data);
     return response.data;
   }
 
   async deleteAppointment(id: string): Promise<void> {
-    await apiClient.delete(`/scheduling/${id}`);
+    await apiClient.delete(`/appointments/${id}`);
   }
 
-  async checkAvailability(startTime: string, endTime: string): Promise<{ available: boolean; conflicts: Appointment[] }> {
-    const response = await apiClient.post<{ available: boolean; conflicts: Appointment[] }>(
-      '/scheduling/check-availability',
-      { startTime, endTime }
-    );
+  async getDashboardStats() {
+    const response = await apiClient.get('/appointments/dashboard');
+    return response.data;
+  }
+
+  async getDayAgenda(date: string, professionalId?: string) {
+    const response = await apiClient.get(`/appointments/day/${date}`, {
+      params: professionalId ? { professionalId } : undefined,
+    });
+    return response.data;
+  }
+
+  async getWeekAgenda(startDate: string, professionalId?: string) {
+    const response = await apiClient.get(`/appointments/week/${startDate}`, {
+      params: professionalId ? { professionalId } : undefined,
+    });
+    return response.data;
+  }
+
+  async checkAvailability(data: CheckAvailabilityRequest) {
+    const response = await apiClient.post('/appointments/public/available-slots', data);
     return response.data;
   }
 
   // Endpoints públicos (para widget de agendamento)
-  async getAvailableSlots(tenantSlug: string, date: string): Promise<AvailableSlotsResponse> {
-    const response = await apiClient.get<AvailableSlotsResponse>(
-      `/scheduling/public/${tenantSlug}/available-slots`,
-      { params: { date } }
+  async getAvailableSlots(tenantId: string, data: CheckAvailabilityRequest) {
+    const response = await apiClient.post(
+      '/appointments/public/available-slots',
+      data,
+      { params: { tenantId } }
     );
     return response.data;
   }
 
   async createPublicAppointment(
-    tenantSlug: string,
+    tenantId: string,
     data: CreateAppointmentRequest
   ): Promise<Appointment> {
     const response = await apiClient.post<Appointment>(
-      `/scheduling/public/${tenantSlug}/appointments`,
-      data
+      '/appointments/public/book',
+      { ...data, source: 'public_page' },
+      { params: { tenantId } }
     );
     return response.data;
   }

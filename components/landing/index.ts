@@ -1,0 +1,10 @@
+export { default as Header } from './Header';
+export { default as HeroSection } from './HeroSection';
+export { default as ProblemSection } from './ProblemSection';
+export { default as SolutionSection } from './SolutionSection';
+export { default as HowItWorksSection } from './HowItWorksSection';
+export { default as PricingSection } from './PricingSection';
+export { default as SocialProofSection } from './SocialProofSection';
+export { default as FAQSection } from './FAQSection';
+export { default as CTASection } from './CTASection';
+export { default as Footer } from './Footer';

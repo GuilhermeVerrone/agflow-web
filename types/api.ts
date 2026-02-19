@@ -12,8 +12,11 @@ export enum Role {
 export enum AppointmentStatus {
   SCHEDULED = 'SCHEDULED',
   CONFIRMED = 'CONFIRMED',
-  CANCELLED = 'CANCELLED',
+  IN_PROGRESS = 'IN_PROGRESS',
   COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+  NO_SHOW = 'NO_SHOW',
+  RESCHEDULED = 'RESCHEDULED',
 }
 
 export interface Tenant {
@@ -65,12 +68,37 @@ export interface Appointment {
   startTime: string;
   endTime: string;
   status: AppointmentStatus;
+  internalNotes?: string;
+  isPaid: boolean;
+  isNoShow: boolean;
+  isRecurring: boolean;
+  recurringRule?: string;
+  source?: string;
+  confirmedAt?: string;
+  confirmedBy?: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
   tenantId: string;
-  userId: string;
-  user?: {
+  branchId?: string;
+  professionalId: string;
+  serviceId: string;
+  resourceId?: string;
+  clientId: string;
+  professional?: {
     id: string;
     name: string;
-    email: string;
+  };
+  service?: {
+    id: string;
+    name: string;
+    price?: number;
+    duration?: number;
+  };
+  client?: {
+    id: string;
+    name: string;
+    email?: string;
+    phone?: string;
   };
   createdAt: string;
   updatedAt: string;

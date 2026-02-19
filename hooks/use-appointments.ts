@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { appointmentService, CreateAppointmentRequest, UpdateAppointmentRequest, QueryAppointmentsParams } from '@/services';
+import { appointmentService, CreateAppointmentRequest, UpdateAppointmentRequest, QueryAppointmentsParams, CheckAvailabilityRequest } from '@/services';
 import { Appointment } from '@/types';
 
 export function useAppointments(params?: QueryAppointmentsParams) {
@@ -52,24 +52,47 @@ export function useDeleteAppointment() {
   });
 }
 
+export function useDashboardStats() {
+  return useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => appointmentService.getDashboardStats(),
+  });
+}
+
+export function useDayAgenda(date: string, professionalId?: string) {
+  return useQuery({
+    queryKey: ['day-agenda', date, professionalId],
+    queryFn: () => appointmentService.getDayAgenda(date, professionalId),
+    enabled: !!date,
+  });
+}
+
+export function useWeekAgenda(startDate: string, professionalId?: string) {
+  return useQuery({
+    queryKey: ['week-agenda', startDate, professionalId],
+    queryFn: () => appointmentService.getWeekAgenda(startDate, professionalId),
+    enabled: !!startDate,
+  });
+}
+
 export function useCheckAvailability() {
   return useMutation({
-    mutationFn: ({ startTime, endTime }: { startTime: string; endTime: string }) =>
-      appointmentService.checkAvailability(startTime, endTime),
+    mutationFn: (data: CheckAvailabilityRequest) =>
+      appointmentService.checkAvailability(data),
   });
 }
 
-export function useAvailableSlots(tenantSlug: string, date: string) {
+export function useAvailableSlots(tenantId: string, data: CheckAvailabilityRequest) {
   return useQuery({
-    queryKey: ['available-slots', tenantSlug, date],
-    queryFn: () => appointmentService.getAvailableSlots(tenantSlug, date),
-    enabled: !!tenantSlug && !!date,
+    queryKey: ['available-slots', tenantId, data],
+    queryFn: () => appointmentService.getAvailableSlots(tenantId, data),
+    enabled: !!tenantId && !!data.professionalId && !!data.serviceId && !!data.date,
   });
 }
 
-export function useCreatePublicAppointment(tenantSlug: string) {
+export function useCreatePublicAppointment(tenantId: string) {
   return useMutation({
     mutationFn: (data: CreateAppointmentRequest) =>
-      appointmentService.createPublicAppointment(tenantSlug, data),
+      appointmentService.createPublicAppointment(tenantId, data),
   });
 }

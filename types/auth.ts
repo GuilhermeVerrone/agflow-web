@@ -9,7 +9,7 @@ export interface RegisterRequest {
   email: string;
   name: string;
   password: string;
-  role?: 'ADMIN' | 'USER';
+  role?: 'ADMIN' | 'PROFESSIONAL' | 'RECEPTIONIST' | 'MANAGER' | 'FINANCIAL' | 'USER';
 }
 
 export interface AuthResponse {

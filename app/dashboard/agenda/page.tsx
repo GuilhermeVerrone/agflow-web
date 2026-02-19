@@ -189,9 +189,9 @@ export default function AgendaPage() {
 
       {/* New Appointment Modal */}
       {showNewModal && (
-        <>
-          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowNewModal(false)} />
-          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 sm:inset-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-md z-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowNewModal(false)} />
+          <div className="relative w-full max-w-md z-10">
             <div className="bg-white rounded-2xl shadow-2xl p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-bold text-gray-900">Novo agendamento</h3>
@@ -268,7 +268,7 @@ export default function AgendaPage() {
               </div>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

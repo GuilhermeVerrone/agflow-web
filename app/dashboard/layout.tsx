@@ -99,8 +99,8 @@ export default function DashboardLayout({
 
         {/* Tenant info */}
         <div className="px-6 py-4 border-b border-gray-100">
-          <p className="text-sm font-semibold text-gray-900 truncate">{user.tenant.name}</p>
-          <p className="text-xs text-gray-400 mt-0.5">Plano {user.tenant.plan}</p>
+          <p className="text-sm font-semibold text-gray-900 truncate">{user.tenant?.name ?? user.email}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{user.tenant?.plan ? `Plano ${user.tenant.plan}` : user.role}</p>
         </div>
 
         {/* Navigation */}

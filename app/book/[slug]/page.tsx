@@ -1,191 +1,291 @@
 'use client';
 
-import { use, useState } from 'react';
-import { useTenantBySlug, useAvailableSlots, useCreatePublicAppointment } from '@/hooks';
-import { format, addDays } from 'date-fns';
+import { useState } from 'react';
+import { use } from 'react';
+import {
+  Calendar,
+  Clock,
+  CheckCircle,
+  ChevronRight,
+  ChevronLeft,
+  User,
+  Phone,
+  MessageCircle,
+  Star,
+  Scissors,
+  X,
+  Loader2,
+} from 'lucide-react';
+import { format, addDays, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  Zap,
-  MapPin,
-  Star,
-  Clock,
-  ChevronRight,
-  CalendarDays,
-  User,
-  CheckCircle,
-  ArrowLeft,
-  Phone,
-  Mail,
-  Shield,
-} from 'lucide-react';
+  usePublicServices,
+  usePublicProfessionals,
+  useAvailableSlots,
+  useCreatePublicAppointment,
+} from '@/hooks';
+import { ServiceCatalog, Professional } from '@/types';
+import { useQuery } from '@tanstack/react-query';
+import { tenantService } from '@/services';
 
-// Mock services data (to be replaced with API data)
-const MOCK_SERVICES = [
-  { id: '550e8400-e29b-41d4-a716-446655440001', name: 'Corte Masculino', price: 45, duration: 30 },
-  { id: '550e8400-e29b-41d4-a716-446655440002', name: 'Corte + Barba', price: 65, duration: 45 },
-  { id: '550e8400-e29b-41d4-a716-446655440003', name: 'Barba', price: 30, duration: 20 },
-  { id: '550e8400-e29b-41d4-a716-446655440004', name: 'Corte Infantil', price: 35, duration: 25 },
-  { id: '550e8400-e29b-41d4-a716-446655440005', name: 'Hidratação', price: 50, duration: 40 },
-];
+type Step = 'landing' | 'service' | 'professional' | 'datetime' | 'confirm' | 'success';
 
-// Mock professionals (to be replaced with API data)
-const MOCK_PROFESSIONALS = [
-  { id: '660e8400-e29b-41d4-a716-446655440001', name: 'Carlos Silva', specialty: 'Barbeiro Senior', initials: 'CS' },
-  { id: '660e8400-e29b-41d4-a716-446655440002', name: 'André Lima', specialty: 'Barbeiro', initials: 'AL' },
-  { id: '660e8400-e29b-41d4-a716-446655440003', name: 'Roberto Souza', specialty: 'Barbeiro', initials: 'RS' },
-];
+interface BookingState {
+  service: ServiceCatalog | null;
+  professional: Professional | null;
+  date: string;
+  time: string;
+  clientName: string;
+  clientPhone: string;
+  clientEmail: string;
+  notes: string;
+}
 
-type BookingStep = 'services' | 'professional' | 'datetime' | 'confirm' | 'success';
+const INITIAL_STATE: BookingState = {
+  service: null,
+  professional: null,
+  date: '',
+  time: '',
+  clientName: '',
+  clientPhone: '',
+  clientEmail: '',
+  notes: '',
+};
 
-export default function PublicBookingPage({ params }: { params: Promise<{ slug: string }> }) {
+export default function BookingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
-  const [step, setStep] = useState<BookingStep>('services');
-  const [selectedService, setSelectedService] = useState<typeof MOCK_SERVICES[0] | null>(null);
-  const [selectedProfessional, setSelectedProfessional] = useState<typeof MOCK_PROFESSIONALS[0] | null>(null);
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [selectedSlot, setSelectedSlot] = useState<{ startTime: string; endTime: string } | null>(null);
-  const [clientData, setClientData] = useState({ name: '', phone: '', email: '', notes: '' });
+  const [step, setStep] = useState<Step>('landing');
+  const [booking, setBooking] = useState<BookingState>(INITIAL_STATE);
 
-  const { data: tenant, isLoading: tenantLoading } = useTenantBySlug(slug);
-  const tenantId = tenant?.id || '';
+  // Public tenant data
+  const { data: tenant } = useQuery({
+    queryKey: ['tenant-public', slug],
+    queryFn: () => tenantService.getTenantBySlug(slug),
+    staleTime: 5 * 60 * 1000,
+  });
 
-  // Only call availability API when on the datetime step and all required IDs are present
-  const availabilityRequest = {
-    professionalId: selectedProfessional?.id || '',
-    serviceId: selectedService?.id || '',
-    date: selectedDate,
-  };
-  const canFetchSlots = step === 'datetime' && !!tenantId && !!selectedProfessional && !!selectedService;
-  const { data: slotsData, isLoading: slotsLoading } = useAvailableSlots(
-    canFetchSlots ? tenantId : '',
-    availabilityRequest
+  const { data: services = [], isLoading: servicesLoading } = usePublicServices(slug);
+  const { data: professionals = [], isLoading: profLoading } = usePublicProfessionals(slug);
+
+  const availabilityRequest = booking.professional && booking.date
+    ? {
+        professionalId: booking.professional.id,
+        serviceId: booking.service?.id ?? '',
+        date: booking.date,
+      }
+    : null;
+
+  const { data: availableSlots = [], isLoading: slotsLoading } = useAvailableSlots(
+    tenant?.id ?? '',
+    availabilityRequest ?? { professionalId: '', serviceId: '', date: '' },
+    { enabled: step === 'datetime' && !!booking.professional && !!booking.date && !!tenant?.id }
   );
-  const createAppointment = useCreatePublicAppointment(tenantId);
+
+  const createAppointment = useCreatePublicAppointment();
+
+  const primaryColor = tenant?.primaryColor ?? '#6366f1';
+  const secondaryColor = tenant?.secondaryColor ?? '#8b5cf6';
+  const logoUrl = tenant?.logoUrl;
+  const coverImageUrl = tenant?.coverImageUrl;
+  const tenantName = tenant?.name ?? 'Agendamento Online';
+  const tenantPhone = tenant?.phone ?? '';
+  const tenantDescription = tenant?.description ?? 'Agende seu horário de forma rápida e fácil.';
+
+  // Generate next 14 days for date picker
+  const dates = Array.from({ length: 14 }, (_, i) => addDays(new Date(), i));
 
   const handleConfirm = async () => {
-    if (!selectedSlot || !selectedService || !selectedProfessional) return;
+    if (!booking.service || !booking.professional || !booking.date || !booking.time) return;
     try {
       await createAppointment.mutateAsync({
-        title: `${clientData.name} - ${selectedService.name}`,
-        description: clientData.notes || undefined,
-        startTime: selectedSlot.startTime,
-        endTime: selectedSlot.endTime,
-        professionalId: selectedProfessional.id,
-        serviceId: selectedService.id,
-        // clientId omitted — backend public/book endpoint resolves or creates the client
-        clientId: tenantId, // placeholder: replace with actual client creation flow
-        source: 'public_page',
+        tenantId: tenant?.id ?? '',
+        professionalId: booking.professional.id,
+        serviceId: booking.service.id,
+        scheduledDate: `${booking.date}T${booking.time}:00`,
+        clientName: booking.clientName,
+        clientPhone: booking.clientPhone,
+        clientEmail: booking.clientEmail || undefined,
+        notes: booking.notes || undefined,
       });
       setStep('success');
-    } catch (error) {
-      console.error('Erro ao criar agendamento:', error);
+    } catch {
+      // error handled by mutation
     }
   };
 
-  const goBack = () => {
-    const order: BookingStep[] = ['services', 'professional', 'datetime', 'confirm'];
-    const currentIndex = order.indexOf(step);
-    if (currentIndex > 0) setStep(order[currentIndex - 1]);
-  };
-
-  if (tenantLoading) {
+  // ─── LANDING ─────────────────────────────────────────────────────────────────
+  if (step === 'landing') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="flex items-center gap-3">
-          <svg className="animate-spin w-6 h-6 text-primary-500" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <span className="text-gray-500 font-medium">Carregando...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (!tenant || !tenant.isActive) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="text-center max-w-md">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Zap className="w-8 h-8 text-gray-400" />
+      <div className="min-h-screen bg-gray-50">
+        {/* Hero */}
+        <div
+          className="relative overflow-hidden"
+          style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
+        >
+          {coverImageUrl && (
+            <img
+              src={coverImageUrl}
+              alt={tenantName}
+              className="absolute inset-0 w-full h-full object-cover mix-blend-overlay opacity-30"
+            />
+          )}
+          <div className="relative z-10 max-w-5xl mx-auto px-6 py-16 text-center">
+            {logoUrl ? (
+              <img src={logoUrl} alt={tenantName} className="h-20 w-auto mx-auto mb-6 rounded-2xl shadow-lg" />
+            ) : (
+              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+                <Scissors className="w-10 h-10 text-white" />
+              </div>
+            )}
+            <h1 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">{tenantName}</h1>
+            <p className="text-lg text-white/80 mb-8 max-w-xl mx-auto">{tenantDescription}</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                onClick={() => setStep('service')}
+                className="inline-flex items-center justify-center gap-2 px-8 py-4 text-base font-bold text-white bg-white/20 hover:bg-white/30 backdrop-blur border border-white/30 rounded-2xl transition-all shadow-lg"
+                style={{ backgroundColor: 'rgba(255,255,255,0.25)' }}
+              >
+                <Calendar className="w-5 h-5" />
+                Agendar agora
+                <ChevronRight className="w-5 h-5" />
+              </button>
+              {tenantPhone && (
+                <a
+                  href={`https://wa.me/${tenantPhone.replace(/\D/g, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 text-base font-bold text-white bg-green-500 hover:bg-green-600 rounded-2xl transition-all shadow-lg"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  WhatsApp
+                </a>
+              )}
+            </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Página não encontrada</h1>
-          <p className="text-gray-500">Este link de agendamento não está disponível ou foi desativado.</p>
+        </div>
+
+        {/* Services preview */}
+        <div className="max-w-5xl mx-auto px-6 py-16">
+          <h2 className="text-3xl font-black text-gray-900 mb-2">Nossos Serviços</h2>
+          <p className="text-gray-500 mb-8">Escolha o serviço ideal para você</p>
+          {servicesLoading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {services.map((service) => (
+                <button
+                  key={service.id}
+                  onClick={() => { setBooking(s => ({ ...s, service })); setStep('professional'); }}
+                  className="text-left bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-md hover:border-gray-200 transition-all group"
+                >
+                  {service.imageUrl ? (
+                    <img src={service.imageUrl} alt={service.name} className="w-full h-32 object-cover rounded-xl mb-4" />
+                  ) : (
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"
+                      style={{ backgroundColor: `${primaryColor}20` }}
+                    >
+                      <Scissors className="w-6 h-6" style={{ color: primaryColor }} />
+                    </div>
+                  )}
+                  <h3 className="font-bold text-gray-900 mb-1">{service.name}</h3>
+                  {service.description && <p className="text-sm text-gray-500 mb-3 line-clamp-2">{service.description}</p>}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1 text-sm text-gray-500">
+                      <Clock className="w-4 h-4" />
+                      {service.duration}min
+                    </div>
+                    <span className="font-bold text-base" style={{ color: primaryColor }}>
+                      R$ {Number(service.price).toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Team */}
+        {professionals.length > 0 && (
+          <div className="max-w-5xl mx-auto px-6 pb-16">
+            <h2 className="text-3xl font-black text-gray-900 mb-2">Nossa Equipe</h2>
+            <p className="text-gray-500 mb-8">Profissionais qualificados para atendê-lo</p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {professionals.map((prof) => (
+                <div key={prof.id} className="bg-white rounded-2xl border border-gray-100 p-5 text-center">
+                  {prof.avatarUrl ? (
+                    <img src={prof.avatarUrl} alt={prof.name} className="w-16 h-16 rounded-full object-cover mx-auto mb-3" />
+                  ) : (
+                    <div
+                      className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 text-white text-xl font-bold"
+                      style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
+                    >
+                      {prof.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                    </div>
+                  )}
+                  <p className="font-bold text-gray-900">{prof.name}</p>
+                  {prof.bio && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{prof.bio}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="border-t border-gray-100 py-8 text-center text-sm text-gray-400">
+          Powered by <span className="font-bold text-gray-600">AgFlow</span>
         </div>
       </div>
     );
   }
 
-  // =============================================
-  // SUCCESS PAGE
-  // =============================================
+  // ─── BOOKING FLOW ─────────────────────────────────────────────────────────────
+  const stepIndex = ['service', 'professional', 'datetime', 'confirm'].indexOf(step);
+  const stepLabels = ['Serviço', 'Profissional', 'Data/Hora', 'Confirmar'];
+
   if (step === 'success') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="bg-white rounded-3xl shadow-xl p-8">
-            <div className="w-20 h-20 bg-accent-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-10 h-10 text-accent-600" />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-10 text-center">
+          <div
+            className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"
+            style={{ backgroundColor: `${primaryColor}20` }}
+          >
+            <CheckCircle className="w-10 h-10" style={{ color: primaryColor }} />
+          </div>
+          <h2 className="text-2xl font-black text-gray-900 mb-2">Agendado!</h2>
+          <p className="text-gray-500 mb-2">
+            Seu agendamento foi confirmado com sucesso.
+          </p>
+          {booking.service && booking.professional && (
+            <div className="bg-gray-50 rounded-2xl p-4 my-6 text-left space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-gray-500">Serviço</span><span className="font-medium">{booking.service.name}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Profissional</span><span className="font-medium">{booking.professional.name}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Data</span><span className="font-medium">{booking.date && format(parseISO(booking.date), "dd/MM/yyyy")}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Hora</span><span className="font-medium">{booking.time}</span></div>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Agendamento confirmado!
-            </h1>
-            <p className="text-gray-500 mb-6">
-              Você receberá uma confirmação por WhatsApp/e-mail em breve.
-            </p>
-
-            <div className="bg-gray-50 rounded-2xl p-5 text-left space-y-3 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
-                  <CalendarDays className="w-4 h-4 text-primary-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Serviço</p>
-                  <p className="text-sm font-medium text-gray-900">{selectedService?.name}</p>
-                </div>
-              </div>
-              {selectedProfessional && (
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-secondary-100 rounded-lg flex items-center justify-center">
-                    <User className="w-4 h-4 text-secondary-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400">Profissional</p>
-                    <p className="text-sm font-medium text-gray-900">{selectedProfessional.name}</p>
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-accent-100 rounded-lg flex items-center justify-center">
-                  <Clock className="w-4 h-4 text-accent-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Data e horário</p>
-                  <p className="text-sm font-medium text-gray-900">
-                    {selectedSlot && format(new Date(selectedDate), "d 'de' MMMM", { locale: ptBR })}
-                    {selectedSlot && ` às ${format(new Date(selectedSlot.startTime), 'HH:mm')}`}
-                  </p>
-                </div>
-              </div>
-            </div>
-
+          )}
+          <div className="flex flex-col gap-3">
+            {tenantPhone && (
+              <a
+                href={`https://wa.me/${tenantPhone.replace(/\D/g, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold text-white bg-green-500 hover:bg-green-600 rounded-xl transition-all"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Contato via WhatsApp
+              </a>
+            )}
             <button
-              onClick={() => {
-                setStep('services');
-                setSelectedService(null);
-                setSelectedProfessional(null);
-                setSelectedSlot(null);
-                setClientData({ name: '', phone: '', email: '', notes: '' });
-              }}
-              className="w-full py-3 bg-gray-900 text-white font-semibold rounded-xl hover:bg-gray-800 transition-colors"
+              onClick={() => { setBooking(INITIAL_STATE); setStep('landing'); }}
+              className="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all"
             >
-              Fazer novo agendamento
+              Voltar ao início
             </button>
           </div>
-
-          <p className="text-xs text-gray-400 mt-4">
-            Powered by <span className="font-semibold">AgFlow</span>
-          </p>
         </div>
       </div>
     );
@@ -193,189 +293,148 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Company Header */}
-      <div className="bg-white border-b border-gray-100">
-        <div className="max-w-2xl mx-auto px-4 py-6">
-          <div className="flex items-center gap-4">
-            {/* Logo placeholder */}
-            <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg">
-              <span className="text-2xl font-bold text-white">
-                {tenant.name.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div className="flex-1">
-              <h1 className="text-xl font-bold text-gray-900">{tenant.name}</h1>
-              <div className="flex items-center gap-3 mt-1">
-                <div className="flex items-center gap-1">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                  ))}
-                  <span className="text-xs text-gray-500 ml-1">4.9 (127)</span>
+      {/* Top bar */}
+      <div
+        className="w-full px-6 py-4 flex items-center gap-4 shadow-sm"
+        style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
+      >
+        <button onClick={() => setStep('landing')} className="text-white/70 hover:text-white">
+          <X className="w-5 h-5" />
+        </button>
+        {logoUrl ? (
+          <img src={logoUrl} alt={tenantName} className="h-8 w-auto rounded-lg" />
+        ) : (
+          <span className="text-white font-bold text-lg">{tenantName}</span>
+        )}
+      </div>
+
+      {/* Progress */}
+      <div className="bg-white border-b border-gray-100 px-6 py-3">
+        <div className="max-w-lg mx-auto flex items-center gap-2">
+          {stepLabels.map((label, i) => (
+            <div key={label} className="flex items-center gap-2 flex-1">
+              <div className="flex items-center gap-1.5">
+                <div
+                  className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center transition-all"
+                  style={i <= stepIndex
+                    ? { backgroundColor: primaryColor, color: 'white' }
+                    : { backgroundColor: '#f3f4f6', color: '#9ca3af' }}
+                >
+                  {i < stepIndex ? '✓' : i + 1}
                 </div>
+                <span className={`text-xs font-medium hidden sm:block ${i <= stepIndex ? 'text-gray-900' : 'text-gray-400'}`}>{label}</span>
               </div>
-              <div className="flex items-center gap-1 mt-1 text-xs text-gray-400">
-                <MapPin className="w-3 h-3" />
-                <span>São Paulo, SP</span>
-              </div>
+              {i < stepLabels.length - 1 && (
+                <div className="flex-1 h-px bg-gray-200 mx-1" />
+              )}
             </div>
-          </div>
+          ))}
         </div>
       </div>
 
-      {/* Booking Flow */}
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        {/* Step indicator */}
-        <div className="flex items-center gap-2 mb-6">
-          {step !== 'services' && (
-            <button onClick={goBack} className="p-2 hover:bg-gray-100 rounded-lg transition-colors mr-2">
-              <ArrowLeft className="w-5 h-5 text-gray-500" />
-            </button>
-          )}
-          <div className="flex items-center gap-2 flex-1">
-            {['services', 'professional', 'datetime', 'confirm'].map((s, i) => (
-              <div
-                key={s}
-                className={`h-1.5 flex-1 rounded-full transition-colors ${
-                  ['services', 'professional', 'datetime', 'confirm'].indexOf(step) >= i
-                    ? 'bg-primary-500'
-                    : 'bg-gray-200'
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* =============================================
-            STEP: SELECT SERVICE
-            ============================================= */}
-        {step === 'services' && (
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-1">Escolha o serviço</h2>
-            <p className="text-sm text-gray-500 mb-5">Selecione o que você deseja agendar</p>
-
-            <div className="space-y-3">
-              {MOCK_SERVICES.map((service) => (
-                <button
-                  key={service.id}
-                  onClick={() => {
-                    setSelectedService(service);
-                    setStep('professional');
-                  }}
-                  className={`w-full flex items-center justify-between p-4 bg-white rounded-xl border transition-all hover:shadow-md hover:border-primary-200 ${
-                    selectedService?.id === service.id
-                      ? 'border-primary-500 shadow-md'
-                      : 'border-gray-100'
-                  }`}
-                >
-                  <div className="text-left">
-                    <p className="font-semibold text-gray-900">{service.name}</p>
-                    <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        {service.duration}min
-                      </span>
+      <div className="max-w-lg mx-auto px-4 py-8">
+        {/* STEP: Service */}
+        {step === 'service' && (
+          <div className="space-y-4">
+            <h2 className="text-2xl font-black text-gray-900">Escolha o serviço</h2>
+            {servicesLoading ? (
+              <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-gray-300" /></div>
+            ) : (
+              <div className="space-y-3">
+                {services.map((service) => (
+                  <button
+                    key={service.id}
+                    onClick={() => { setBooking(s => ({ ...s, service })); setStep('professional'); }}
+                    className={`w-full text-left bg-white rounded-2xl border p-4 hover:shadow-md transition-all ${booking.service?.id === service.id ? 'border-2 shadow-md' : 'border-gray-100'}`}
+                    style={booking.service?.id === service.id ? { borderColor: primaryColor } : {}}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${primaryColor}15` }}>
+                        <Scissors className="w-6 h-6" style={{ color: primaryColor }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-gray-900">{service.name}</p>
+                        {service.description && <p className="text-sm text-gray-500 truncate">{service.description}</p>}
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-xs text-gray-400 flex items-center gap-1"><Clock className="w-3 h-3" />{service.duration}min</span>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="font-bold text-base" style={{ color: primaryColor }}>R$ {Number(service.price).toFixed(2).replace('.', ',')}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg font-bold text-gray-900">
-                      R${service.price}
-                    </span>
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
-                  </div>
-                </button>
-              ))}
-            </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* =============================================
-            STEP: SELECT PROFESSIONAL
-            ============================================= */}
+        {/* STEP: Professional */}
         {step === 'professional' && (
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-1">Escolha o profissional</h2>
-            <p className="text-sm text-gray-500 mb-5">Quem vai te atender?</p>
-
-            <div className="space-y-3">
-              {/* No preference option */}
-              <button
-                onClick={() => {
-                  setSelectedProfessional(null);
-                  setStep('datetime');
-                }}
-                className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-primary-200 hover:shadow-md transition-all"
-              >
-                <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
-                  <User className="w-6 h-6 text-gray-400" />
-                </div>
-                <div className="text-left flex-1">
-                  <p className="font-semibold text-gray-900">Sem preferência</p>
-                  <p className="text-sm text-gray-500">Qualquer profissional disponível</p>
-                </div>
-                <ChevronRight className="w-5 h-5 text-gray-400" />
-              </button>
-
-              {MOCK_PROFESSIONALS.map((prof) => (
-                <button
-                  key={prof.id}
-                  onClick={() => {
-                    setSelectedProfessional(prof);
-                    setStep('datetime');
-                  }}
-                  className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-primary-200 hover:shadow-md transition-all"
-                >
-                  <div className="w-12 h-12 bg-gradient-to-br from-primary-400 to-secondary-400 rounded-xl flex items-center justify-center text-white font-bold">
-                    {prof.initials}
-                  </div>
-                  <div className="text-left flex-1">
-                    <p className="font-semibold text-gray-900">{prof.name}</p>
-                    <p className="text-sm text-gray-500">{prof.specialty}</p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400" />
-                </button>
-              ))}
-            </div>
+          <div className="space-y-4">
+            <button onClick={() => setStep('service')} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+              <ChevronLeft className="w-4 h-4" /> Voltar
+            </button>
+            <h2 className="text-2xl font-black text-gray-900">Escolha o profissional</h2>
+            {profLoading ? (
+              <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-gray-300" /></div>
+            ) : (
+              <div className="space-y-3">
+                {professionals.map((prof) => (
+                  <button
+                    key={prof.id}
+                    onClick={() => { setBooking(s => ({ ...s, professional: prof })); setStep('datetime'); }}
+                    className={`w-full text-left bg-white rounded-2xl border p-4 hover:shadow-md transition-all ${booking.professional?.id === prof.id ? 'border-2 shadow-md' : 'border-gray-100'}`}
+                    style={booking.professional?.id === prof.id ? { borderColor: primaryColor } : {}}
+                  >
+                    <div className="flex items-center gap-4">
+                      {prof.avatarUrl ? (
+                        <img src={prof.avatarUrl} alt={prof.name} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
+                      ) : (
+                        <div
+                          className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-lg"
+                          style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
+                        >
+                          {prof.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-bold text-gray-900">{prof.name}</p>
+                        {prof.bio && <p className="text-sm text-gray-500">{prof.bio}</p>}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* =============================================
-            STEP: SELECT DATE & TIME
-            ============================================= */}
+        {/* STEP: Date & Time */}
         {step === 'datetime' && (
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-1">Escolha o horário</h2>
-            <p className="text-sm text-gray-500 mb-5">Selecione a data e o horário desejado</p>
+          <div className="space-y-6">
+            <button onClick={() => setStep('professional')} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+              <ChevronLeft className="w-4 h-4" /> Voltar
+            </button>
+            <h2 className="text-2xl font-black text-gray-900">Escolha a data e hora</h2>
 
-            {/* Date selector */}
-            <div className="mb-6">
-              <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
-                {[...Array(14)].map((_, i) => {
-                  const date = addDays(new Date(), i);
+            {/* Date picker */}
+            <div>
+              <p className="text-sm font-semibold text-gray-600 mb-3">Data</p>
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {dates.map((date) => {
                   const dateStr = format(date, 'yyyy-MM-dd');
-                  const isSelected = selectedDate === dateStr;
-                  const isToday = i === 0;
+                  const isSelected = booking.date === dateStr;
                   return (
                     <button
                       key={dateStr}
-                      onClick={() => {
-                        setSelectedDate(dateStr);
-                        setSelectedSlot(null);
-                      }}
-                      className={`flex-shrink-0 w-16 py-3 text-center rounded-xl border-2 transition-all ${
-                        isSelected
-                          ? 'border-primary-500 bg-primary-50 shadow-md'
-                          : 'border-gray-100 bg-white hover:border-gray-200'
-                      }`}
+                      onClick={() => setBooking(s => ({ ...s, date: dateStr, time: '' }))}
+                      className="flex-shrink-0 flex flex-col items-center px-4 py-3 rounded-2xl border transition-all min-w-[60px]"
+                      style={isSelected ? { backgroundColor: primaryColor, borderColor: primaryColor, color: 'white' } : { backgroundColor: 'white', borderColor: '#e5e7eb', color: '#374151' }}
                     >
-                      <div className={`text-xs font-medium uppercase ${isSelected ? 'text-primary-600' : 'text-gray-400'}`}>
-                        {isToday ? 'Hoje' : format(date, 'EEE', { locale: ptBR })}
-                      </div>
-                      <div className={`text-xl font-bold mt-0.5 ${isSelected ? 'text-primary-700' : 'text-gray-700'}`}>
-                        {format(date, 'd')}
-                      </div>
-                      <div className={`text-xs ${isSelected ? 'text-primary-500' : 'text-gray-400'}`}>
-                        {format(date, 'MMM', { locale: ptBR })}
-                      </div>
+                      <span className="text-xs font-medium capitalize">{format(date, 'EEE', { locale: ptBR })}</span>
+                      <span className="text-lg font-bold leading-tight">{format(date, 'd')}</span>
                     </button>
                   );
                 })}
@@ -383,194 +442,131 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
             </div>
 
             {/* Time slots */}
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-3">
-                {format(new Date(selectedDate + 'T12:00:00'), "EEEE, d 'de' MMMM", { locale: ptBR })}
-              </p>
-              {slotsLoading ? (
-                <div className="flex items-center gap-2 py-8 justify-center text-gray-400">
-                  <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  <span className="text-sm">Carregando horários...</span>
-                </div>
-              ) : slotsData?.availableSlots.length === 0 ? (
-                <div className="text-center py-8">
-                  <CalendarDays className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">Nenhum horário disponível</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-                  {slotsData?.availableSlots
-                    .filter((slot: { startTime: string; endTime: string; available: boolean }) => slot.available)
-                    .map((slot: { startTime: string; endTime: string; available: boolean }) => {
-                      const isSelected = selectedSlot?.startTime === slot.startTime;
+            {booking.date && (
+              <div>
+                <p className="text-sm font-semibold text-gray-600 mb-3">Horário</p>
+                {slotsLoading ? (
+                  <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-gray-300" /></div>
+                ) : availableSlots.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-6">Nenhum horário disponível para este dia.</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2">
+                    {availableSlots.map((slot) => {
+                      const time = typeof slot === 'string' ? slot : slot.time ?? slot.startTime ?? '';
+                      const isSelected = booking.time === time;
                       return (
                         <button
-                          key={slot.startTime}
-                          onClick={() => setSelectedSlot(slot)}
-                          className={`py-3 text-sm font-medium rounded-xl border-2 transition-all ${
-                            isSelected
-                              ? 'border-primary-500 bg-primary-500 text-white shadow-lg shadow-primary-500/25'
-                              : 'border-gray-100 bg-white text-gray-700 hover:border-primary-200'
-                          }`}
+                          key={time}
+                          onClick={() => setBooking(s => ({ ...s, time }))}
+                          className="py-2.5 text-sm font-semibold rounded-xl border transition-all"
+                          style={isSelected ? { backgroundColor: primaryColor, borderColor: primaryColor, color: 'white' } : { backgroundColor: 'white', borderColor: '#e5e7eb', color: '#374151' }}
                         >
-                          {format(new Date(slot.startTime), 'HH:mm')}
+                          {time}
                         </button>
                       );
                     })}
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
+              </div>
+            )}
 
-            {/* Continue button */}
-            {selectedSlot && (
+            {booking.date && booking.time && (
               <button
                 onClick={() => setStep('confirm')}
-                className="w-full mt-6 py-4 bg-gradient-to-r from-primary-500 to-primary-600 text-white font-semibold rounded-xl hover:from-primary-600 hover:to-primary-700 transition-all shadow-lg shadow-primary-500/25"
+                className="w-full py-3.5 text-base font-bold text-white rounded-2xl transition-all shadow-lg"
+                style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
               >
-                Continuar
+                Continuar <ChevronRight className="inline w-5 h-5" />
               </button>
             )}
           </div>
         )}
 
-        {/* =============================================
-            STEP: CONFIRM BOOKING
-            ============================================= */}
+        {/* STEP: Confirm */}
         {step === 'confirm' && (
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-1">Confirme seu agendamento</h2>
-            <p className="text-sm text-gray-500 mb-5">Preencha seus dados e confirme</p>
+          <div className="space-y-6">
+            <button onClick={() => setStep('datetime')} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+              <ChevronLeft className="w-4 h-4" /> Voltar
+            </button>
+            <h2 className="text-2xl font-black text-gray-900">Seus dados</h2>
 
-            {/* Booking summary */}
-            <div className="bg-gray-50 rounded-2xl p-5 mb-6 space-y-3">
-              {selectedService && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Serviço</span>
-                  <span className="text-sm font-medium text-gray-900">{selectedService.name} - R${selectedService.price}</span>
-                </div>
-              )}
-              {selectedProfessional && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Profissional</span>
-                  <span className="text-sm font-medium text-gray-900">{selectedProfessional.name}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">Data</span>
-                <span className="text-sm font-medium text-gray-900">
-                  {format(new Date(selectedDate + 'T12:00:00'), "d 'de' MMMM", { locale: ptBR })}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">Horário</span>
-                <span className="text-sm font-medium text-gray-900">
-                  {selectedSlot && format(new Date(selectedSlot.startTime), 'HH:mm')}
-                  {selectedSlot && ` - ${format(new Date(selectedSlot.endTime), 'HH:mm')}`}
-                </span>
+            {/* Summary */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-gray-500">Serviço</span><span className="font-medium">{booking.service?.name}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Profissional</span><span className="font-medium">{booking.professional?.name}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Data</span><span className="font-medium">{booking.date && format(parseISO(booking.date), "dd 'de' MMMM", { locale: ptBR })}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Hora</span><span className="font-medium">{booking.time}</span></div>
+              <div className="flex justify-between border-t border-gray-100 pt-2 mt-2">
+                <span className="text-gray-500">Valor</span>
+                <span className="font-bold" style={{ color: primaryColor }}>R$ {booking.service && Number(booking.service.price).toFixed(2).replace('.', ',')}</span>
               </div>
             </div>
 
             {/* Client form */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <span className="flex items-center gap-2"><User className="w-4 h-4" /> Nome completo *</span>
-                </label>
-                <input
-                  type="text"
-                  value={clientData.name}
-                  onChange={(e) => setClientData({ ...clientData, name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                  placeholder="Seu nome"
-                  required
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome completo *</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={booking.clientName}
+                    onChange={(e) => setBooking(s => ({ ...s, clientName: e.target.value }))}
+                    placeholder="Seu nome"
+                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:border-transparent outline-none text-sm"
+                    style={{ '--tw-ring-color': primaryColor } as React.CSSProperties}
+                  />
+                </div>
               </div>
-
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    <span className="flex items-center gap-2"><Phone className="w-4 h-4" /> Telefone *</span>
-                  </label>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Telefone / WhatsApp *</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="tel"
-                    value={clientData.phone}
-                    onChange={(e) => setClientData({ ...clientData, phone: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                    placeholder="(11) 99999-9999"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    <span className="flex items-center gap-2"><Mail className="w-4 h-4" /> E-mail</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={clientData.email}
-                    onChange={(e) => setClientData({ ...clientData, email: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                    placeholder="seu@email.com"
+                    value={booking.clientPhone}
+                    onChange={(e) => setBooking(s => ({ ...s, clientPhone: e.target.value }))}
+                    placeholder="(11) 99999-0000"
+                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:border-transparent outline-none text-sm"
                   />
                 </div>
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">E-mail (opcional)</label>
+                <input
+                  type="email"
+                  value={booking.clientEmail}
+                  onChange={(e) => setBooking(s => ({ ...s, clientEmail: e.target.value }))}
+                  placeholder="seu@email.com"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:border-transparent outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Observações (opcional)</label>
                 <textarea
-                  value={clientData.notes}
-                  onChange={(e) => setClientData({ ...clientData, notes: e.target.value })}
-                  rows={2}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none resize-none"
+                  value={booking.notes}
+                  onChange={(e) => setBooking(s => ({ ...s, notes: e.target.value }))}
                   placeholder="Alguma informação adicional..."
+                  rows={3}
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:border-transparent outline-none text-sm resize-none"
                 />
               </div>
             </div>
 
-            {/* Policy */}
-            <div className="mt-4 p-3 bg-yellow-50 rounded-xl border border-yellow-100">
-              <p className="text-xs text-yellow-700">
-                <strong>Política de cancelamento:</strong> Cancelamentos devem ser feitos com pelo menos 2 horas de antecedência.
-              </p>
-            </div>
-
-            {/* Confirm button */}
             <button
               onClick={handleConfirm}
-              disabled={createAppointment.isPending || !clientData.name || !clientData.phone}
-              className="w-full mt-6 py-4 bg-gradient-to-r from-accent-500 to-accent-600 text-white font-semibold rounded-xl hover:from-accent-600 hover:to-accent-700 transition-all shadow-lg shadow-accent-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!booking.clientName || !booking.clientPhone || createAppointment.isPending}
+              className="w-full py-3.5 text-base font-bold text-white rounded-2xl transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
             >
               {createAppointment.isPending ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Confirmando...
-                </span>
+                <><Loader2 className="w-5 h-5 animate-spin" /> Confirmando...</>
               ) : (
-                'Confirmar agendamento'
+                <><CheckCircle className="w-5 h-5" /> Confirmar agendamento</>
               )}
             </button>
-
-            <div className="flex items-center justify-center gap-2 mt-3 text-xs text-gray-400">
-              <Shield className="w-3.5 h-3.5" />
-              Seus dados estão protegidos
-            </div>
           </div>
         )}
-      </div>
-
-      {/* Powered by footer */}
-      <div className="text-center py-6 border-t border-gray-100 mt-8">
-        <p className="text-xs text-gray-400">
-          Agendamento por{' '}
-          <a href="/" className="font-semibold text-primary-500 hover:text-primary-600">
-            AgFlow
-          </a>
-        </p>
       </div>
     </div>
   );

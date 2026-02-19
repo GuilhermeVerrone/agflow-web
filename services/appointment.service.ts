@@ -55,7 +55,7 @@ export interface CheckAvailabilityRequest {
 
 class AppointmentService {
   async listAppointments(params?: QueryAppointmentsParams) {
-    const response = await apiClient.get('/appointments', { params });
+    const response = await apiClient.get<{ data: Appointment[]; meta: { total: number; page: number; limit: number; totalPages: number } }>('/appointments', { params });
     return response.data;
   }
 

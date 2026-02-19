@@ -31,8 +31,8 @@ export default function AgendaPage() {
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
 
   const { data: appointments, isLoading } = useAppointments({
-    startDate: format(weekStart, 'yyyy-MM-dd'),
-    endDate: format(weekEnd, 'yyyy-MM-dd'),
+    dateFrom: format(weekStart, 'yyyy-MM-dd'),
+    dateTo: format(weekEnd, 'yyyy-MM-dd'),
   });
 
   const days = view === 'week'

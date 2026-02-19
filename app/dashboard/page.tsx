@@ -24,8 +24,8 @@ export default function DashboardPage() {
   const today = new Date();
   
   const { data: appointments, isLoading } = useAppointments({
-    startDate: format(startOfMonth(today), 'yyyy-MM-dd'),
-    endDate: format(endOfMonth(today), 'yyyy-MM-dd'),
+    dateFrom: format(startOfMonth(today), 'yyyy-MM-dd'),
+    dateTo: format(endOfMonth(today), 'yyyy-MM-dd'),
   });
 
   const todayAppointments = appointments?.filter(apt => {

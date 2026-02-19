@@ -31,12 +31,12 @@ import { ptBR } from 'date-fns/locale';
 
 // ─── Classification Badges ────────────────────────────────────────────────────
 const CLASSIFICATION_BADGES: Record<ClientClassification, { label: string; color: string }> = {
-  NEW: { label: 'Novo', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-  RECURRING: { label: 'Frequente', color: 'bg-accent-50 text-accent-700 border-accent-200' },
-  VIP: { label: 'VIP', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
-  AT_RISK: { label: 'Em risco', color: 'bg-orange-50 text-orange-700 border-orange-200' },
-  INACTIVE: { label: 'Inativo', color: 'bg-gray-50 text-gray-500 border-gray-200' },
-  LOST: { label: 'Perdido', color: 'bg-red-50 text-red-600 border-red-200' },
+  [ClientClassification.NEW]: { label: 'Novo', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  [ClientClassification.RECURRING]: { label: 'Frequente', color: 'bg-accent-50 text-accent-700 border-accent-200' },
+  [ClientClassification.VIP]: { label: 'VIP', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
+  [ClientClassification.AT_RISK]: { label: 'Em risco', color: 'bg-orange-50 text-orange-700 border-orange-200' },
+  [ClientClassification.INACTIVE]: { label: 'Inativo', color: 'bg-gray-50 text-gray-500 border-gray-200' },
+  [ClientClassification.LOST]: { label: 'Perdido', color: 'bg-red-50 text-red-600 border-red-200' },
 };
 
 // ─── Form ─────────────────────────────────────────────────────────────────────
@@ -205,11 +205,11 @@ export default function ClientsPage() {
 
   const classificationOptions: Array<{ value: ClientClassification | 'all'; label: string }> = [
     { value: 'all', label: 'Todos' },
-    { value: 'VIP', label: 'VIP' },
-    { value: 'RECURRING', label: 'Frequentes' },
-    { value: 'NEW', label: 'Novos' },
-    { value: 'AT_RISK', label: 'Em risco' },
-    { value: 'INACTIVE', label: 'Inativos' },
+    { value: ClientClassification.VIP, label: 'VIP' },
+    { value: ClientClassification.RECURRING, label: 'Frequentes' },
+    { value: ClientClassification.NEW, label: 'Novos' },
+    { value: ClientClassification.AT_RISK, label: 'Em risco' },
+    { value: ClientClassification.INACTIVE, label: 'Inativos' },
   ];
 
   return (

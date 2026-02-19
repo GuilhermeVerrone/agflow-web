@@ -24,7 +24,7 @@ import {
   useAvailableSlots,
   useCreatePublicAppointment,
 } from '@/hooks';
-import { ServiceCatalog, Professional } from '@/types';
+import { ServiceCatalog, Professional, AvailableSlotsResponse } from '@/types';
 import { useQuery } from '@tanstack/react-query';
 import { tenantService } from '@/services';
 
@@ -75,13 +75,13 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
       }
     : null;
 
-  const { data: availableSlots = [], isLoading: slotsLoading } = useAvailableSlots(
+  const { data: slotsResponse, isLoading: slotsLoading } = useAvailableSlots(
     tenant?.id ?? '',
-    availabilityRequest ?? { professionalId: '', serviceId: '', date: '' },
-    { enabled: step === 'datetime' && !!booking.professional && !!booking.date && !!tenant?.id }
+    availabilityRequest ?? { professionalId: '', serviceId: '', date: '' }
   );
+  const availableSlots = (slotsResponse as AvailableSlotsResponse | undefined)?.availableSlots?.filter((s) => s.available) ?? [];
 
-  const createAppointment = useCreatePublicAppointment();
+  const createAppointment = useCreatePublicAppointment(tenant?.id ?? '');
 
   const primaryColor = tenant?.primaryColor ?? '#6366f1';
   const secondaryColor = tenant?.secondaryColor ?? '#8b5cf6';
@@ -97,15 +97,22 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
   const handleConfirm = async () => {
     if (!booking.service || !booking.professional || !booking.date || !booking.time) return;
     try {
+      const startTime = `${booking.date}T${booking.time}:00`;
+      const endMs = new Date(startTime).getTime() + booking.service.duration * 60 * 1000;
+      const endTime = new Date(endMs).toISOString().replace('Z', '');
       await createAppointment.mutateAsync({
-        tenantId: tenant?.id ?? '',
+        title: `${booking.clientName} - ${booking.service.name}`,
         professionalId: booking.professional.id,
         serviceId: booking.service.id,
-        scheduledDate: `${booking.date}T${booking.time}:00`,
-        clientName: booking.clientName,
-        clientPhone: booking.clientPhone,
-        clientEmail: booking.clientEmail || undefined,
-        notes: booking.notes || undefined,
+        clientId: '',
+        startTime,
+        endTime,
+        internalNotes: [
+          booking.clientPhone ? `Tel: ${booking.clientPhone}` : '',
+          booking.clientEmail ? `Email: ${booking.clientEmail}` : '',
+          booking.notes || '',
+        ].filter(Boolean).join(' | ') || undefined,
+        source: 'public_page',
       });
       setStep('success');
     } catch {
@@ -452,7 +459,11 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
                 ) : (
                   <div className="grid grid-cols-3 gap-2">
                     {availableSlots.map((slot) => {
-                      const time = typeof slot === 'string' ? slot : slot.time ?? slot.startTime ?? '';
+                      const time = slot.startTime.length <= 5
+                        ? slot.startTime
+                        : slot.startTime.includes('T')
+                          ? slot.startTime.split('T')[1].substring(0, 5)
+                          : slot.startTime;
                       const isSelected = booking.time === time;
                       return (
                         <button

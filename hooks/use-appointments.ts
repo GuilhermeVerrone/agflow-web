@@ -5,7 +5,11 @@ import { Appointment } from '@/types';
 export function useAppointments(params?: QueryAppointmentsParams) {
   return useQuery({
     queryKey: ['appointments', params],
-    queryFn: () => appointmentService.listAppointments(params),
+    queryFn: async () => {
+      const result = await appointmentService.listAppointments(params);
+      // Backend returns { data: Appointment[], meta: {...} }
+      return (result?.data ?? result) as Appointment[];
+    },
   });
 }
 

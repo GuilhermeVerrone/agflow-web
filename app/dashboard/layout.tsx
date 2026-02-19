@@ -174,10 +174,10 @@ export default function DashboardLayout({
                   className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <div className="w-8 h-8 bg-gradient-to-br from-primary-400 to-secondary-400 rounded-lg flex items-center justify-center text-white text-sm font-bold">
-                    {user.name.charAt(0).toUpperCase()}
+                    {(user.name ?? user.email ?? '?').charAt(0).toUpperCase()}
                   </div>
                   <div className="hidden sm:block text-left">
-                    <p className="text-sm font-medium text-gray-900 leading-tight">{user.name}</p>
+                    <p className="text-sm font-medium text-gray-900 leading-tight">{user.name ?? user.email}</p>
                     <p className="text-xs text-gray-400 leading-tight">{user.role}</p>
                   </div>
                   <ChevronDown className="w-4 h-4 text-gray-400 hidden sm:block" />
@@ -188,7 +188,7 @@ export default function DashboardLayout({
                     <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
                     <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-50 py-2">
                       <div className="px-4 py-2 border-b border-gray-100">
-                        <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                        <p className="text-sm font-medium text-gray-900">{user.name ?? user.email}</p>
                         <p className="text-xs text-gray-500">{user.email}</p>
                       </div>
                       <Link

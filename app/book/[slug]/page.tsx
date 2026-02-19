@@ -19,20 +19,20 @@ import {
   Shield,
 } from 'lucide-react';
 
-// Mock services data (to be fetched from API)
+// Mock services data (to be replaced with API data)
 const MOCK_SERVICES = [
-  { id: '1', name: 'Corte Masculino', price: 45, duration: 30 },
-  { id: '2', name: 'Corte + Barba', price: 65, duration: 45 },
-  { id: '3', name: 'Barba', price: 30, duration: 20 },
-  { id: '4', name: 'Corte Infantil', price: 35, duration: 25 },
-  { id: '5', name: 'Hidratação', price: 50, duration: 40 },
+  { id: '550e8400-e29b-41d4-a716-446655440001', name: 'Corte Masculino', price: 45, duration: 30 },
+  { id: '550e8400-e29b-41d4-a716-446655440002', name: 'Corte + Barba', price: 65, duration: 45 },
+  { id: '550e8400-e29b-41d4-a716-446655440003', name: 'Barba', price: 30, duration: 20 },
+  { id: '550e8400-e29b-41d4-a716-446655440004', name: 'Corte Infantil', price: 35, duration: 25 },
+  { id: '550e8400-e29b-41d4-a716-446655440005', name: 'Hidratação', price: 50, duration: 40 },
 ];
 
-// Mock professionals
+// Mock professionals (to be replaced with API data)
 const MOCK_PROFESSIONALS = [
-  { id: '1', name: 'Carlos Silva', specialty: 'Barbeiro Senior', initials: 'CS' },
-  { id: '2', name: 'André Lima', specialty: 'Barbeiro', initials: 'AL' },
-  { id: '3', name: 'Roberto Souza', specialty: 'Barbeiro', initials: 'RS' },
+  { id: '660e8400-e29b-41d4-a716-446655440001', name: 'Carlos Silva', specialty: 'Barbeiro Senior', initials: 'CS' },
+  { id: '660e8400-e29b-41d4-a716-446655440002', name: 'André Lima', specialty: 'Barbeiro', initials: 'AL' },
+  { id: '660e8400-e29b-41d4-a716-446655440003', name: 'Roberto Souza', specialty: 'Barbeiro', initials: 'RS' },
 ];
 
 type BookingStep = 'services' | 'professional' | 'datetime' | 'confirm' | 'success';
@@ -49,13 +49,17 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const { data: tenant, isLoading: tenantLoading } = useTenantBySlug(slug);
   const tenantId = tenant?.id || '';
 
-  // Build availability request only when we have enough data
+  // Only call availability API when on the datetime step and all required IDs are present
   const availabilityRequest = {
     professionalId: selectedProfessional?.id || '',
     serviceId: selectedService?.id || '',
     date: selectedDate,
   };
-  const { data: slotsData, isLoading: slotsLoading } = useAvailableSlots(tenantId, availabilityRequest);
+  const canFetchSlots = step === 'datetime' && !!tenantId && !!selectedProfessional && !!selectedService;
+  const { data: slotsData, isLoading: slotsLoading } = useAvailableSlots(
+    canFetchSlots ? tenantId : '',
+    availabilityRequest
+  );
   const createAppointment = useCreatePublicAppointment(tenantId);
 
   const handleConfirm = async () => {
@@ -63,12 +67,14 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     try {
       await createAppointment.mutateAsync({
         title: `${clientData.name} - ${selectedService.name}`,
-        description: clientData.notes,
+        description: clientData.notes || undefined,
         startTime: selectedSlot.startTime,
         endTime: selectedSlot.endTime,
         professionalId: selectedProfessional.id,
         serviceId: selectedService.id,
-        clientId: '', // will be resolved server-side for public bookings
+        // clientId omitted — backend public/book endpoint resolves or creates the client
+        clientId: tenantId, // placeholder: replace with actual client creation flow
+        source: 'public_page',
       });
       setStep('success');
     } catch (error) {

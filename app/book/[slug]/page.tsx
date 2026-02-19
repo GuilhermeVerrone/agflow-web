@@ -47,18 +47,28 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [clientData, setClientData] = useState({ name: '', phone: '', email: '', notes: '' });
 
   const { data: tenant, isLoading: tenantLoading } = useTenantBySlug(slug);
-  const { data: slotsData, isLoading: slotsLoading } = useAvailableSlots(slug, selectedDate);
-  const createAppointment = useCreatePublicAppointment(slug);
+  const tenantId = tenant?.id || '';
+
+  // Build availability request only when we have enough data
+  const availabilityRequest = {
+    professionalId: selectedProfessional?.id || '',
+    serviceId: selectedService?.id || '',
+    date: selectedDate,
+  };
+  const { data: slotsData, isLoading: slotsLoading } = useAvailableSlots(tenantId, availabilityRequest);
+  const createAppointment = useCreatePublicAppointment(tenantId);
 
   const handleConfirm = async () => {
-    if (!selectedSlot || !selectedService) return;
+    if (!selectedSlot || !selectedService || !selectedProfessional) return;
     try {
       await createAppointment.mutateAsync({
         title: `${clientData.name} - ${selectedService.name}`,
         description: clientData.notes,
         startTime: selectedSlot.startTime,
         endTime: selectedSlot.endTime,
-        status: 'SCHEDULED',
+        professionalId: selectedProfessional.id,
+        serviceId: selectedService.id,
+        clientId: '', // will be resolved server-side for public bookings
       });
       setStep('success');
     } catch (error) {
@@ -387,8 +397,8 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
               ) : (
                 <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
                   {slotsData?.availableSlots
-                    .filter((slot) => slot.available)
-                    .map((slot) => {
+                    .filter((slot: { startTime: string; endTime: string; available: boolean }) => slot.available)
+                    .map((slot: { startTime: string; endTime: string; available: boolean }) => {
                       const isSelected = selectedSlot?.startTime === slot.startTime;
                       return (
                         <button
